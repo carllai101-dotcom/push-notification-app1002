@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Push Notification Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+  <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+    <h1 class="text-3xl font-bold mb-6 text-gray-800">Send Push Notification</h1>
+
+    <form id="notificationForm" class="space-y-6">
+      <div>
+        <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+          Notification Title
+        </label>
+        <input
+          type="text"
+          id="title"
+          name="title"
+          required
+          placeholder="Enter notification title"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <div>
+        <label for="body" class="block text-sm font-medium text-gray-700 mb-2">
+          Message
+        </label>
+        <textarea
+          id="body"
+          name="body"
+          required
+          rows="4"
+          placeholder="Enter notification message"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        ></textarea>
+      </div>
+
+      <div>
+        <label for="url" class="block text-sm font-medium text-gray-700 mb-2">
+          Click URL (optional)
+        </label>
+        <input
+          type="url"
+          id="url"
+          name="url"
+          placeholder="https://example.com"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <button
+        type="submit"
+        class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+        id="submitButton"
+      >
+        Send to All Clients
+      </button>
+    </form>
+
+    <div id="result" class="mt-6 hidden">
+      <div class="p-4 rounded-lg" id="resultContent"></div>
+    </div>
+
+    <div class="mt-8 pt-6 border-t border-gray-200">
+      <h2 class="text-xl font-semibold mb-4 text-gray-800">Active Subscriptions</h2>
+      <div id="subscriptionsCount" class="text-gray-600">Loading...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    const Bolt Database_URL = 'https://0ec90b57d6e95fcbda19832f.supabase.co';
+    const Bolt Database_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJib2x0IiwicmVmIjoiMGVjOTBiNTdkNmU5NWZjYmRhMTk4MzJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4ODE1NzQsImV4cCI6MTc1ODg4MTU3NH0.9I8-U0x86Ak8t2DGaIk0HfvTSLsAyzdnz-Nw00mMkKw';
+
+    async function loadSubscriptionsCount() {
+      try {
+        const response = await fetch(`${Bolt Database_URL}/rest/v1/push_subscriptions?is_active=eq.true&select=count`, {
+          headers: {
+            'apikey': Bolt Database_ANON_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'count=exact'
+          }
+        });
+
+        const data = await response.json();
+        const count = response.headers.get('Content-Range')?.split('/')[1] || '0';
+        document.getElementById('subscriptionsCount').textContent = `${count} active client(s)`;
+      } catch (error) {
+        document.getElementById('subscriptionsCount').textContent = 'Error loading subscriptions';
+        console.error('Error:', error);
+      }
+    }
+
+    document.getElementById('notificationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const submitButton = document.getElementById('submitButton');
+      const resultDiv = document.getElementById('result');
+      const resultContent = document.getElementById('resultContent');
+
+      submitButton.disabled = true;
+      submitButton.textContent = 'Sending...';
+
+      const formData = {
+        title: document.getElementById('title').value,
+        body: document.getElementById('body').value,
+        url: document.getElementById('url').value || undefined
+      };
+
+      try {
+        const response = await fetch(`${Bolt Database_URL}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Bolt Database_ANON_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          resultDiv.classList.remove('hidden');
+          resultContent.className = 'p-4 rounded-lg bg-green-100 text-green-800';
+          resultContent.innerHTML = `
+            <p class="font-semibold">Success!</p>
+            <p class="text-sm mt-1">Sent to ${result.successful} of ${result.total} client(s)</p>
+            ${result.failed > 0 ? `<p class="text-sm mt-1">${result.failed} failed</p>` : ''}
+          `;
+
+          document.getElementById('notificationForm').reset();
+          loadSubscriptionsCount();
+        } else {
+          throw new Error(result.error || 'Failed to send notification');
+        }
+      } catch (error) {
+        resultDiv.classList.remove('hidden');
+        resultContent.className = 'p-4 rounded-lg bg-red-100 text-red-800';
+        resultContent.innerHTML = `
+          <p class="font-semibold">Error</p>
+          <p class="text-sm mt-1">${error.message}</p>
+        `;
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Send to All Clients';
+      }
+    });
+
+    loadSubscriptionsCount();
+    setInterval(loadSubscriptionsCount, 30000);
+  </script>
+</body>
+</html>
